@@ -1,0 +1,44 @@
+/* ════════════════════════════════════════════════════════
+   CHRISTMAS TREE OPERATOR — Standalone Styles
+   Only the design tokens, base resets, and @keyframes
+   needed by the game. All game UI uses inline styles.
+════════════════════════════════════════════════════════ */
+
+:root {
+  --cyan:    #00d2ff;
+  --orange:  #ff5200;
+  --dark:    #07071e;
+  --darker:  #030310;
+  --card:    #0c0c28;
+  --border:  #1c1c48;
+  --text:    #d0d0ec;
+  --silver:  #9aa0bc;
+  --yellow:  #ffd200;
+  --green:   #00e676;
+  --warm:    #ffb347;
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body:    'Barlow', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--darker);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar       { width: 6px; }
+::-webkit-scrollbar-track { background: var(--darker); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Used by compressor icon during spin-up / running ── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
