@@ -10,10 +10,14 @@ Single-page browser game simulating a gas wellhead Christmas tree operator at th
 
 ## Architecture
 
-- **`index.html`** — Full UI: SVG wellhead schematic (interactive valves, compressor, particles, pressure gauge), HUD panels, choke handwheel SVG, tutorial modal, debrief modal, game-over report. Heavy use of inline styles; almost no CSS classes.
-- **`game.js`** — All game logic inside a single IIFE closure. Contains: physics engine (`physicsTick` at 250ms), game state (`GS` object), event system (`EVENTS[]` + `CATASTROPHIC_EVENTS[]`), sound engine (Web Audio API, no audio files), scoring, charting (Canvas 2D), tutorial steps, session report, PNG export. Exposes globals via `window.*` for HTML `onclick` handlers.
+- **`index.html`** — Full UI: SVG wellhead schematic (interactive valves, compressor, particles, pressure gauge), HUD panels, choke handwheel SVG, tutorial modal, debrief modal, game-over report, history modal (`#gHistoryModal`), replay overlay (`#gReplayOverlay`). Heavy use of inline styles; almost no CSS classes.
+- **`history.js`** — Persistent session history via `localStorage` (`gasWellHistory` key, max 500 records). Singleton on `window.GameHistory`. Provides lifetime stats, sortable table renderer, JSON export/import.
+- **`replay.js`** — Replay recording, storage, and playback. Three singletons on `window.*`: `ReplayRecorder` (captures timestamped player inputs), `ReplayStorage` (persists replays in `localStorage` under `gasWellReplays`, max 30), `ReplayPlayer` (drives playback at variable speed via game loop hook). Also defines global UI helpers: `startReplayByGameId()`, `openHistoryModal()`, `importAndPlayReplay()`, etc.
+- **`game.js`** — All game logic inside a single IIFE closure. Contains: physics engine (`physicsTick` at 250ms), game state (`GS` object), event system (`EVENTS[]` + `CATASTROPHIC_EVENTS[]`), sound engine (Web Audio API, no audio files), scoring, charting (Canvas 2D), tutorial steps, session report, PNG export. Exposes globals via `window.*` for HTML `onclick` handlers. Integrates with `history.js` and `replay.js` at session start/end.
 - **`game.css`** — Minimal: CSS custom properties (design tokens), base resets, `@keyframes spin`. All game UI styling is inline in `index.html` and `game.js`.
 - **`export-pdf.js`** — PDF export using jsPDF (loaded from CDN). Reads game data via `window._gameExportAPI` bridge object exposed by `game.js`.
+
+**Script load order** (in `index.html`): `history.js` → `replay.js` → `game.js` → `export-pdf.js`. Order matters — `game.js` reads from `window.GameHistory`, `window.ReplayRecorder`, etc.
 
 ## Key Patterns
 
@@ -25,6 +29,10 @@ Single-page browser game simulating a gas wellhead Christmas tree operator at th
 - **Sound is procedural** via Web Audio API oscillators/noise — no external audio files. All sounds are in the `SND` object.
 - **Chart** uses raw Canvas 2D (`#gChart`), sampled every ~1s. Data stored in `CHART.data[]` with time-based x-axis positioning.
 - **Simulated calendar**: 1 real second ≈ 11.57 simulated days. Session spans Apr 1996 – mid 2015 over ~10 min. Use `simDate()`, `formatSimDateShort()`, `formatSimDateLog()`.
+- **Seeded PRNG** (`gameRandom()` using Mulberry32) ensures deterministic event sequences for replay. Seed is stored on `ReplayRecorder.start({ seed })` and restored via `window._replaySeed` during playback.
+- **Replay integration**: `game.js` records player actions (valve, choke, compressor, stop) into `ReplayRecorder` during normal play. At session end, the recording is saved to `ReplayStorage` and game history to `GameHistory`. During replay playback, `window._replayMode = true` suppresses recording and history saving.
+- **Replay hooks on `window`**: `_replayMode`, `_replaySeed`, `_replayTickHook`, `_replayOnGameEnd`, `_replaySetSpeed(speed)`, `_replayGetElapsed`, `_inReplayAction`. These are set by `replay.js` and read by `game.js`.
+- **`localStorage` keys**: `gasWellHistory` (game session records, max 500) and `gasWellReplays` (replay data, max 30).
 
 ## Critical Conventions
 
