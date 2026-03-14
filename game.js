@@ -2200,6 +2200,7 @@
     // ── Seeded PRNG — generate or use replay seed for determinism ──
     if (window._replaySeed != null) {
       _rngState = window._replaySeed;
+      window._replaySeed = null;   // consume once — prevent stale seed leaking into future games
     } else {
       _rngState = Date.now() ^ (Math.random() * 0x7FFFFFFF | 0);
     }
