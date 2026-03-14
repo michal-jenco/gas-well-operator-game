@@ -597,6 +597,10 @@
             style="padding:0.8rem 1.4rem;background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:4px;font-family:var(--font-display);font-size:0.85rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;opacity:0.8;">
             ? HOW TO PLAY
           </button>
+          <button onclick="openHistoryModal()"
+            style="padding:0.8rem 1.4rem;background:transparent;color:#9966cc;border:1px solid #9966cc;border-radius:4px;font-family:var(--font-display);font-size:0.85rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;opacity:0.8;">
+            📊 HISTORY
+          </button>
           <button id="gMuteBtn" onclick="toggleMute()"
             style="padding:0.8rem 1rem;background:transparent;color:var(--silver);border:1px solid var(--border);border-radius:4px;font-family:var(--font-display);font-size:0.85rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;opacity:0.7;"
             title="Toggle sound">
@@ -640,6 +644,9 @@
           style="padding:0.75rem 2.5rem;background:var(--orange);color:#fff;border:none;border-radius:4px;font-family:var(--font-display);font-size:0.85rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">
           ↺ TRY AGAIN
         </button>
+        <button id="gWatchReplayBtn" onclick="startReplayByGameId(this.getAttribute('data-game-id'))" style="display:none;padding:0.75rem 1.8rem;background:transparent;color:#00d2ff;border:1px solid #00d2ff;border-radius:4px;font-family:var(--font-display);font-size:0.85rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">
+          ▶ WATCH REPLAY
+        </button>
         <button id="gDebriefBtn" onclick="openDebrief()" style="display:none;padding:0.75rem 1.8rem;background:transparent;color:#ff5555;border:1px solid #ff5555;border-radius:4px;font-family:var(--font-display);font-size:0.85rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">
           🔍 WHY DID I FAIL?
         </button>
@@ -648,6 +655,10 @@
         </button>
         <button id="gExportPdfBtn" onclick="exportResultPDF()" style="display:none;padding:0.75rem 1.8rem;background:transparent;color:#cc88ff;border:1px solid #cc88ff;border-radius:4px;font-family:var(--font-display);font-size:0.85rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">
           📄 EXPORT PDF
+        </button>
+        <button onclick="openHistoryModal()"
+          style="padding:0.75rem 1.8rem;background:transparent;color:#9966cc;border:1px solid #9966cc;border-radius:4px;font-family:var(--font-display);font-size:0.85rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">
+          📊 HISTORY
         </button>
         <button onclick="gameTutorial()"
           style="padding:0.75rem 1.8rem;background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:4px;font-family:var(--font-display);font-size:0.85rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">
@@ -748,9 +759,101 @@
       </div>
     </div>
 
+    <!-- ── History & Stats modal ── -->
+    <div id="gHistoryModal" style="display:none;position:fixed;inset:0;z-index:9997;background:rgba(3,3,16,0.95);backdrop-filter:blur(10px);align-items:center;justify-content:center;padding:1rem;" onclick="if(event.target===this)closeHistoryModal()">
+      <div style="background:linear-gradient(160deg,#0c0c28 0%,#07071e 100%);border:2px solid #9966cc;border-radius:12px;max-width:820px;width:100%;max-height:90vh;overflow-y:auto;position:relative;">
+
+        <!-- Purple top bar -->
+        <div style="height:4px;background:linear-gradient(90deg,#9966cc,#cc88ff,#9966cc);border-radius:12px 12px 0 0;"></div>
+
+        <!-- Header -->
+        <div style="padding:1.6rem 2rem 1rem;border-bottom:1px solid #2a1a4a;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-family:var(--font-display);font-size:0.7rem;letter-spacing:3px;color:#9966cc;text-transform:uppercase;margin-bottom:4px;">Operator Records</div>
+              <div style="font-family:var(--font-display);font-size:1.5rem;font-weight:800;color:#fff;">Game <span style="color:#cc88ff;">History</span></div>
+            </div>
+            <button onclick="closeHistoryModal()" style="padding:0.4rem 0.8rem;background:transparent;color:#555577;border:1px solid #2a2a50;border-radius:3px;font-family:var(--font-display);font-size:0.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">✕ Close</button>
+          </div>
+        </div>
+
+        <!-- Lifetime stats cards -->
+        <div style="padding:1rem 2rem 0.5rem;">
+          <div style="font-family:var(--font-display);font-size:0.68rem;letter-spacing:2px;text-transform:uppercase;color:var(--silver);margin-bottom:10px;">Lifetime Statistics</div>
+          <div id="gHistoryStats" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;"></div>
+        </div>
+
+        <!-- History table -->
+        <div style="padding:1rem 2rem;">
+          <div style="font-family:var(--font-display);font-size:0.68rem;letter-spacing:2px;text-transform:uppercase;color:var(--silver);margin-bottom:10px;">Session History <span style="color:#555577;">(click column headers to sort)</span></div>
+          <div id="gHistoryTableWrap" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:#08082a;"></div>
+        </div>
+
+        <!-- Footer buttons -->
+        <div style="padding:1rem 2rem 1.5rem;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;border-top:1px solid #2a1a4a;">
+          <button onclick="importAndPlayReplay()" style="padding:0.6rem 1.2rem;background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:4px;font-family:var(--font-display);font-size:0.75rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;">
+            📥 IMPORT REPLAY
+          </button>
+          <button onclick="GameHistory.exportJSON()" style="padding:0.6rem 1.2rem;background:transparent;color:#00e676;border:1px solid #00e676;border-radius:4px;font-family:var(--font-display);font-size:0.75rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;">
+            📤 EXPORT HISTORY
+          </button>
+          <button onclick="GameHistory.importJSON(function(){openHistoryModal()})" style="padding:0.6rem 1.2rem;background:transparent;color:#ffd200;border:1px solid #ffd200;border-radius:4px;font-family:var(--font-display);font-size:0.75rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;">
+            📥 IMPORT HISTORY
+          </button>
+          <button onclick="clearAllGameData()" style="padding:0.6rem 1.2rem;background:transparent;color:#ff5555;border:1px solid #ff5555;border-radius:4px;font-family:var(--font-display);font-size:0.75rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;">
+            🗑 CLEAR ALL
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Replay playback overlay ── -->
+    <div id="gReplayOverlay" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9996;pointer-events:none;">
+      <div style="pointer-events:auto;max-width:580px;margin:0 auto 16px;background:linear-gradient(135deg,rgba(12,12,40,0.97),rgba(5,5,32,0.97));border:1.5px solid #00d2ff;border-radius:10px;padding:12px 18px;backdrop-filter:blur(12px);box-shadow:0 4px 24px rgba(0,210,255,0.15);">
+
+        <!-- Badge + status row -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#00d2ff;animation:spin 2s linear infinite;box-shadow:0 0 6px #00d2ff;"></div>
+            <span style="font-family:var(--font-display);font-size:0.72rem;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#00d2ff;">REPLAY</span>
+          </div>
+          <span id="gReplayStatus" style="font-family:var(--font-display);font-size:0.72rem;letter-spacing:1px;color:var(--silver);">Playing…</span>
+        </div>
+
+        <!-- Progress bar -->
+        <div style="height:6px;background:#0a0a2a;border-radius:3px;overflow:hidden;margin-bottom:6px;border:1px solid #1c1c48;">
+          <div id="gReplayProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#00d2ff,#00e676);border-radius:3px;transition:width 0.25s;"></div>
+        </div>
+        <div id="gReplayProgressLbl" style="font-family:var(--font-display);font-size:0.65rem;color:#555577;text-align:center;margin-bottom:10px;">0:00 / 0:00</div>
+
+        <!-- Controls row -->
+        <div style="display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;">
+          <button id="gReplayPauseBtn" onclick="ReplayPlayer.togglePause()"
+            style="padding:5px 14px;background:transparent;color:#ffd200;border:1px solid #ffd200;border-radius:4px;font-family:var(--font-display);font-size:0.72rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">
+            ⏸ Pause
+          </button>
+          <button id="gReplaySpeedBtn" onclick="ReplayPlayer.cycleSpeed()"
+            style="padding:5px 14px;background:transparent;color:#cc88ff;border:1px solid #cc88ff;border-radius:4px;font-family:var(--font-display);font-size:0.72rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">
+            ⚡ 4×
+          </button>
+          <button id="gReplayRestartBtn" onclick="ReplayPlayer.restart()" style="display:none;padding:5px 14px;background:transparent;color:#00e676;border:1px solid #00e676;border-radius:4px;font-family:var(--font-display);font-size:0.72rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">
+            ↺ Restart
+          </button>
+          <button onclick="stopReplayAndReset()"
+            style="padding:5px 14px;background:transparent;color:#ff5555;border:1px solid #ff5555;border-radius:4px;font-family:var(--font-display);font-size:0.72rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">
+            ■ Stop
+          </button>
+        </div>
+
+      </div>
+    </div>
+
   </div><!-- /container -->
 </section>
 
+<script src="history.js"></script>
+<script src="replay.js"></script>
 <script src="game.js"></script>
 <script src="export-pdf.js"></script>
 

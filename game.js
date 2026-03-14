@@ -33,6 +33,20 @@
     compressorSpinup: 0,     // counts up to 8s during spin-up phase
   };
 
+  /* ── Seeded PRNG (Mulberry32) — deterministic for replay ── */
+  let _rngState = 0;
+  function gameRandom() {
+    _rngState |= 0;
+    _rngState = _rngState + 0x6D2B79F5 | 0;
+    var t = Math.imul(_rngState ^ _rngState >>> 15, 1 | _rngState);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+
+  /* ── Replay hooks — set by replay.js, read by game engine ── */
+  window._replayGetElapsed = () => GS.elapsed;
+  window._replayIsRunning  = () => GS.running;
+
   /* ── DOM refs ── */
   const $ = id => document.getElementById(id);
 
@@ -794,7 +808,7 @@
         GS.demand = 1100;
         GS._demandHeldSeconds = 0;
         // Spot price spike: 2.5–4.0× base price (realistic TTF intraday spike range)
-        GS.spikePriceMultiplier = 2.5 + Math.random() * 1.5;
+        GS.spikePriceMultiplier = 2.5 + gameRandom() * 1.5;
         const el = $('gGasPriceLbl');
         if (el) { el.textContent = GS.spikePriceMultiplier.toFixed(1) + '× SPIKE ⚡'; el.style.color = '#ffd200'; }
         const earningsEl = $('gEarnings');
@@ -1246,12 +1260,7 @@
       catastrophic: true,
       debrief: {
         wrong: 'A subsurface blowthrough event connects a high-pressure gas pocket to the wellbore, overwhelming all surface control. Reservoir pressure spikes faster than any choke adjustment can compensate — the wellhead reaches rated pressure limit within seconds.',
-        shouldHave: 'Blowthrough events are by design unwinnable in this simulation — they represent a genuine field emergency that cannot be resolved at the wellhead alone. In real operations: 1. Attempt immediate LMV + UMV closure. 2. Evacuate the wellsite. 3. Notify emergency services and the Mining Authority. At Trebišov, BOP (blowout preventer) stack would be the last line of defence.',
-        controls: [
-          { id: 'umv', label: 'UMV', color: '#ff3333', hint: 'Close immediately' },
-          { id: 'lmv', label: 'LMV', color: '#ff3333', hint: 'Close immediately' },
-        ],
-        context: 'Reservoir blowthroughs in mature Eastern Slovak Basin gas fields were extremely rare due to low remaining reservoir pressures by the 2010s. However in earlier production history (1960s–1980s), several well control incidents occurred during workover operations at Trebišov when high-pressure pockets in the Pannonian sandstone formations were unexpectedly penetrated.'
+        shouldHave: 'Blowthrough events are by design unwinnable in this simulation — they represent a genuine field emergency that cannot be resolved at the wellhead alone. In real operations: 1. Attempt immediate LMV + UMV closure. 2. Evacuate the wellsite. 3. Notify emergency services and the Mining Authority. At Trebišov, BOP (blowout preventer) stack would be the last line of defence.'
       },
       trigger() {
         GS.maxFlow = 3000;
@@ -1274,7 +1283,7 @@
         const bonus = Math.round(GS.score * 9);
         GS.score += bonus;
         GS.multiplier *= 2.0;
-        chartAddEvent('⭐ HEROIC', '#ffd200');
+        chartAddEvent('⚙ COMP', '#cc88ff');
         SND.milestone();
         setTimeout(SND.milestone, 200);
         setTimeout(SND.milestone, 400);
@@ -1336,7 +1345,7 @@
         const bonus = Math.round(GS.score * 9);
         GS.score += bonus;
         GS.multiplier *= 2.0;
-        chartAddEvent('⭐ HEROIC', '#ffd200');
+        chartAddEvent('⚙ COMP', '#cc88ff');
         SND.milestone();
         setTimeout(SND.milestone, 200);
         setTimeout(SND.milestone, 400);
@@ -1389,7 +1398,7 @@
         const bonus = Math.round(GS.score * 9);
         GS.score += bonus;
         GS.multiplier *= 2.0;
-        chartAddEvent('⭐ HEROIC', '#ffd200');
+        chartAddEvent('⚙ COMP', '#cc88ff');
         SND.milestone();
         setTimeout(SND.milestone, 200);
         setTimeout(SND.milestone, 400);
@@ -1412,12 +1421,12 @@
     if (GS.activeEvent) return;
 
     // After 3 minutes, there's a 30% chance each trigger roll picks a catastrophic event
-    const useCatastrophic = GS.elapsed > 180 && Math.random() < 0.30;
+    const useCatastrophic = GS.elapsed > 180 && gameRandom() < 0.30;
     const pool = useCatastrophic ? CATASTROPHIC_EVENTS : EVENTS;
 
     // Weighted random pick — events with weight > 1 appear proportionally more often
     const totalWeight = pool.reduce((s, e) => s + (e.weight || 1), 0);
-    let r = Math.random() * totalWeight;
+    let r = gameRandom() * totalWeight;
     let ev = pool[pool.length - 1];
     for (const e of pool) { r -= (e.weight || 1); if (r <= 0) { ev = e; break; } }
 
@@ -1432,7 +1441,7 @@
     // Events arrive faster the longer the session runs (min 10s gap)
     const sessionFactor = Math.max(0.4, 1 - GS.elapsed / 600);
     const baseGap = useCatastrophic ? 15 : 20;
-    GS.nextEventIn = (baseGap + Math.random() * 15) * sessionFactor;
+    GS.nextEventIn = (baseGap + gameRandom() * 15) * sessionFactor;
   }
 
   function showEventBanner(ev) {
@@ -1720,14 +1729,17 @@
 
   window.gameToggleCompressor = function() {
     if (!GS.running || GS.compressor !== 'available') return;
+    if (window.ReplayPlayer && window.ReplayPlayer.isPlaying() && !window._inReplayAction) return;
     GS.compressor = 'spinup';
     GS.compressorSpinup = 0;
     log('⚙ Compressor spin-up initiated — 8 seconds to online.', '#ffaa44');
     SND.startup();
-    // Hide pointer now that player has clicked
     const ptr = $('gptr-compressor');
     if (ptr) ptr.style.display = 'none';
     updateCompressorHUD();
+    if (!window._inReplayAction && window.ReplayRecorder && window.ReplayRecorder.isRecording()) {
+      window.ReplayRecorder.recordAction('compressor', null);
+    }
   };
 
   /* ── Simplex-like noise (simple smooth pseudorandom) ── */
@@ -2062,6 +2074,7 @@
   /* ── Public: toggle valve ── */
   window.gameToggleValve = function(id) {
     if (!GS.running) return;
+    if (window.ReplayPlayer && window.ReplayPlayer.isPlaying() && !window._inReplayAction) return;
     GS.valves[id] = !GS.valves[id];
     const state = GS.valves[id] ? 'open' : 'closed';
     if (id === 'swab') setValveVisual(id, GS.valves[id] ? 'open' : 'locked');
@@ -2074,6 +2087,9 @@
     SND.valve();
     checkEventResolution();
     $('gAnnParticles').style.display = (GS.valves.lwv && GS.running) ? 'block' : 'none';
+    if (!window._inReplayAction && window.ReplayRecorder && window.ReplayRecorder.isRecording()) {
+      window.ReplayRecorder.recordAction('valve', id);
+    }
   };
 
   /* ── Public: set choke ── */
@@ -2109,10 +2125,13 @@
     const SENSITIVITY = 0.02;   // % choke per deltaY unit
 
     wheel.addEventListener('wheel', function(e) {
+      if (window.ReplayPlayer && window.ReplayPlayer.isPlaying()) return;
       e.preventDefault();
       e.stopPropagation();
-      // scroll up → deltaY is negative on most platforms → negate it → positive → choke opens
       window.gameSetChoke(GS.choke + (e.deltaY * SENSITIVITY));
+      if (window.ReplayRecorder && window.ReplayRecorder.isRecording()) {
+        window.ReplayRecorder.recordAction('choke', GS.choke);
+      }
     }, { passive: false });
   })();
 
@@ -2176,11 +2195,24 @@
     if ($('gDebriefBtn')) $('gDebriefBtn').style.display = 'none';
     if ($('gExportBtn'))  $('gExportBtn').style.display  = 'none';
     if ($('gExportPdfBtn')) $('gExportPdfBtn').style.display = 'none';
+    if ($('gWatchReplayBtn')) $('gWatchReplayBtn').style.display = 'none';
+
+    // ── Seeded PRNG — generate or use replay seed for determinism ──
+    if (window._replaySeed != null) {
+      _rngState = window._replaySeed;
+    } else {
+      _rngState = Date.now() ^ (Math.random() * 0x7FFFFFFF | 0);
+    }
+    // ── Start replay recording (skip if in replay playback) ──
+    if (!window._replayMode && window.ReplayRecorder) {
+      window.ReplayRecorder.start({ seed: _rngState });
+      GS._replayGameId = window.ReplayRecorder.getGameId();
+    }
+
     $('gChartPanel').style.display = 'block';
     window.gameSetChoke(0);
     refreshValveVisuals();
     clearLog();
-    // Reset compressor UI
     const compBtn = $('gCompressorBtn');
     if (compBtn) { compBtn.disabled = true; compBtn.style.opacity = '0.4'; compBtn.style.cursor = 'not-allowed'; compBtn.style.color = '#555577'; compBtn.style.borderColor = '#333355'; compBtn.textContent = '⚙ COMPRESSOR'; }
     const compPanel = $('gCompressorPanel');
@@ -2196,27 +2228,40 @@
     _underSupplySeconds = 0;
     _overSupplySeconds  = 0;
 
-    GS._interval = setInterval(() => {
-      physicsTick();
-      // Advance hold-timer events once per tick (demand spike, hydrate blockage, PBU test)
-      if (GS.activeEvent && !GS.eventResolved && GS.activeEvent.tickHold) {
-        GS.activeEvent.tickHold();
-      }
-      checkEventResolution();
-      checkHeroicShutIn();
-      // Track session stats
-      SESSION.peakFlow = Math.max(SESSION.peakFlow, GS.flowRate);
-      SESSION.minReservoirP = Math.min(SESSION.minReservoirP, GS.reservoirP);
-      if (GS.wellheadP > 0) SESSION.minWHP = Math.min(SESSION.minWHP, GS.wellheadP);
-      SESSION.peakMultiplier = Math.max(SESSION.peakMultiplier, GS.multiplier);
-      const diff = Math.abs(GS.flowRate - GS.demand) / GS.demand;
-      if (diff <= 0.10 && GS.valves.rwv && !GS.paused) SESSION.goodFlowSeconds += 0.25;
-    }, 250);
+    GS._interval = setInterval(_gameLoopTick, 250);
+  };
+
+  /* ── Game loop tick (extracted for replay speed control) ── */
+  function _gameLoopTick() {
+    physicsTick();
+    if (GS.activeEvent && !GS.eventResolved && GS.activeEvent.tickHold) {
+      GS.activeEvent.tickHold();
+    }
+    checkEventResolution();
+    checkHeroicShutIn();
+    SESSION.peakFlow = Math.max(SESSION.peakFlow, GS.flowRate);
+    SESSION.minReservoirP = Math.min(SESSION.minReservoirP, GS.reservoirP);
+    if (GS.wellheadP > 0) SESSION.minWHP = Math.min(SESSION.minWHP, GS.wellheadP);
+    SESSION.peakMultiplier = Math.max(SESSION.peakMultiplier, GS.multiplier);
+    const diff = Math.abs(GS.flowRate - GS.demand) / GS.demand;
+    if (diff <= 0.10 && GS.valves.rwv && !GS.paused) SESSION.goodFlowSeconds += 0.25;
+    if (window._replayTickHook) window._replayTickHook();
+  }
+
+  /* ── Replay speed control ── */
+  window._replaySetSpeed = function(speed) {
+    if (!GS.running) return;
+    clearInterval(GS._interval);
+    GS._interval = setInterval(_gameLoopTick, Math.max(16, Math.round(250 / speed)));
   };
 
   /* ── Public: stop (manual emergency shut-in) ── */
   window.gameStop = function() {
     if (!GS.running) return;
+    if (window.ReplayPlayer && window.ReplayPlayer.isPlaying() && !window._inReplayAction) return;
+    if (!window._inReplayAction && window.ReplayRecorder && window.ReplayRecorder.isRecording()) {
+      window.ReplayRecorder.recordAction('stop', null);
+    }
     ['lmv','umv','rwv','lwv','swab'].forEach(id => {
       GS.valves[id] = false;
       setValveVisual(id, id === 'swab' ? 'locked' : 'closed');
@@ -2276,7 +2321,9 @@
     showSessionReport('failure', title, body);
   }
 
-  /* ── Session report ── */
+  /* ════════════════════════════════════
+     SESSION REPORT
+  ════════════════════════════════════ */
   function showSessionReport(type, failTitle, failBody) {
     const score   = Math.round(GS.score);
     const elapsed = GS.elapsed;
@@ -2366,7 +2413,7 @@
       : '';
     statsGrid.innerHTML = legacyCard + stats.map(s =>
       `<div style="background:#08082a;border:1px solid var(--border);border-radius:6px;padding:10px 8px;text-align:center;">
-        <div style="font-family:var(--font-display);font-size:0.58rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--silver);margin-bottom:4px;">${s.label}</div>
+        <div style="font-family:var(--font-display);font-size:0.58rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--silver);margin-bottom:4px;">${s.label.toUpperCase()}</div>
         <div style="font-family:var(--font-display);font-size:1.05rem;font-weight:800;color:${s.color};">${s.value}</div>
       </div>`
     ).join('');
@@ -2382,8 +2429,8 @@
       heroicBanner.style.cssText = 'margin:14px auto 0;max-width:560px;background:linear-gradient(135deg,#1a1400,#0a0a00);border:2px solid #ffd200;border-radius:8px;padding:14px 20px;text-align:center;';
       heroicBanner.innerHTML =
         '<div style="font-size:1.8rem;margin-bottom:4px;">⭐</div>' +
-        '<div style="font-family:var(--font-display);font-size:1.1rem;font-weight:800;color:#ffd200;letter-spacing:2px;margin-bottom:6px;">HEROIC SHUT-IN BONUS</div>' +
-        '<div style="font-size:0.85rem;color:#ccaa00;line-height:1.7;">You closed all bore valves (LMV + UMV + RWV) during a catastrophic event — protecting equipment and personnel even as the session ended. Score multiplied ×10.</div>' +
+        '<div style="font-family:var(--font-display);font-size:1.1rem;font-weight:800;color:#ffd200;letter-spacing:2px;margin-bottom:6px;text-align:center;">HEROIC SHUT-IN BONUS</div>' +
+        '<div style="font-size:0.85rem;color:#ccaa00;line-height:1.6;">You closed all bore valves (LMV + UMV + RWV) during a catastrophic event — protecting equipment and personnel even as the session ended. Score multiplied ×10.</div>' +
         '<div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;color:#ffd200;margin-top:8px;">Final Score: ' + Math.round(GS.score).toLocaleString() + ' pts</div>';
     } else {
       heroicBanner.style.display = 'none';
@@ -2415,6 +2462,46 @@
       score, elapsed, evR, evT, evF, onTarget, stats,
       earningsStr, gasPriceLabel: GAS_PRICE_LABEL,
     };
+
+    // ── Save history + replay (skip during replay playback) ──
+    if (!window._replayMode) {
+      // Stop recording and save replay
+      const replayData = window.ReplayRecorder ? window.ReplayRecorder.stop() : null;
+      if (replayData && window.ReplayStorage) {
+        window.ReplayStorage.save(replayData);
+      }
+      // Save game history
+      if (window.GameHistory) {
+        window.GameHistory.save({
+          gameId: GS._replayGameId || '',
+          date: new Date().toISOString(),
+          score: score,
+          elapsed: elapsed,
+          type: type,
+          rating: rating,
+          perf: perf,
+          eventsTriggered: evT,
+          eventsResolved: evR,
+          eventsFailed: evF,
+          penaltyCount: GS.penaltyCount,
+          onTargetPct: onTarget,
+          peakMultiplier: SESSION.peakMultiplier,
+          totalGasDelivered: GS.totalGasDelivered,
+          earningsStr: earningsStr,
+          isLegend: !!GS._legacyBonusAwarded,
+          isHeroic: type === 'heroic',
+        });
+      }
+      // Show watch-replay button
+      const watchBtn = $('gWatchReplayBtn');
+      if (watchBtn && GS._replayGameId) {
+        watchBtn.style.display = 'inline-block';
+        watchBtn.setAttribute('data-game-id', GS._replayGameId);
+      }
+    }
+
+    // Signal replay-end to ReplayPlayer
+    if (window._replayOnGameEnd) window._replayOnGameEnd();
   }
 
   /* ════════════════════════════════════
@@ -2792,6 +2879,7 @@
     log('── System reset. Ready to start. ──', '#333366');
     const logHint = $('gLogHint');
     if (logHint) logHint.style.display = 'none';
+    if ($('gWatchReplayBtn')) $('gWatchReplayBtn').style.display = 'none';
     // Reset compressor UI
     const compBtn2 = $('gCompressorBtn');
     if (compBtn2) { compBtn2.disabled = true; compBtn2.style.opacity = '0.4'; compBtn2.style.cursor = 'not-allowed'; compBtn2.style.color = '#555577'; compBtn2.style.borderColor = '#333355'; compBtn2.textContent = '⚙ COMPRESSOR'; }
@@ -2844,8 +2932,8 @@
           <div style="color:var(--silver);">Every m³ of gas you deliver earns real money at live TTF gas market prices. Demand spikes pay 2.5–4× spot rate.</div>
         </div>
       </div>
-      <div style="background:#08082a;border:1px solid #ff330044;border-radius:6px;padding:0.75rem 1rem;font-size:0.8rem;color:#ff9966;">
-        ⚠ <strong>Session ends</strong> if: wellhead pressure exceeds 32 bar, annulus pressure exceeds 20 bar, 5 safety violations, flow too far from demand for too long, or a catastrophic event is not handled.
+      <div style="background:#0a0a20;border:1px solid #ffd20033;border-radius:6px;padding:8px 12px;margin-top:8px;font-size:0.78rem;color:#ccaa00;">
+        💡 During events, <strong>animated pulsing circles</strong> appear on the schematic pointing to the exact valve you need to act on.
       </div>`
     },
     // ── Step 2: Valve stack ───────────────────────────────────────────────────
@@ -3058,10 +3146,10 @@
       </p>
       <div style="background:linear-gradient(135deg,#1a1400,#0a0a00);border:2px solid #ffd200;border-radius:8px;padding:12px 16px;margin-bottom:10px;text-align:center;">
         <div style="font-size:1.4rem;margin-bottom:3px;">⭐</div>
-        <div style="font-family:var(--font-display);font-size:0.95rem;font-weight:800;color:#ffd200;letter-spacing:1.5px;margin-bottom:5px;">HEROIC SHUT-IN — 10× SCORE BONUS</div>
+        <div style="font-family:var(--font-display);font-size:0.95rem;font-weight:800;color:#ffd200;letter-spacing:1.5px;margin-bottom:5px;text-align:center;">HEROIC SHUT-IN — 10× SCORE BONUS</div>
         <div style="font-size:0.82rem;color:#ccaa00;line-height:1.6;">Close all 3 bore valves — <strong>LMV + UMV + RWV</strong> — before the timer expires. You save equipment and personnel. Score ×10.</div>
       </div>
-      <div style="display:grid;gap:7px;font-size:0.8rem;margin-bottom:8px;">
+      <div style="display:grid;gap:7px;font-size:0.8rem;margin-bottom:0.6rem;">
         <div style="display:flex;gap:10px;align-items:flex-start;background:#1a0000;border:1px solid #ff000055;border-radius:6px;padding:9px 11px;">
           <span style="font-size:1.1rem;flex-shrink:0;">💀</span>
           <div><strong style="color:#ff5555;">Reservoir Blowthrough</strong> — subsurface fracture, pressure spikes uncontrollably. <em style="color:#888;">Cannot be resolved.</em> <strong style="color:#ffd200;">Close LMV+UMV+RWV before timer for heroic bonus.</strong> <em style="color:#555588;">(12s)</em></div>
